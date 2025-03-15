@@ -9,7 +9,7 @@ import (
 )
 
 func Bundle(inputPath string, out string) (string, error) {
-	css, err := GetBundledCss("./css/input.css")
+	css, err := GetBundledCss(inputPath)
 	if err != nil {
 		return "", err
 	}
