@@ -12,6 +12,8 @@ To get started, you'll need three files `./input.css`, `./global.css`, and `main
 In `./input.css`, we use `@bonchi` to import css and `bonchi-mix` to mixin the css from other classes.
 
 **BIG GOTCHA HERE**, the import you use with `@bonchi` is relative to the root of your **GO PROGRAM**, not the **INPUT FILE** itself.
+
+`./input.css`
 ```css
 @bonchi ./global.css;
 
