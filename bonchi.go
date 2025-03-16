@@ -3,25 +3,42 @@ package bonchi
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-func Bundle(inputPath string, out string) (string, error) {
-	css, err := GetBundledCss(inputPath)
+func Bundle(inputDir string, out string) (string, error) {
+	output := ""
+	err := filepath.Walk(inputDir, func(path string, info fs.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		pathParts := strings.Split(path, ".")
+		lastPart := pathParts[len(pathParts)-1]
+		if lastPart == "css" {
+			cssBytes, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			cssStr := string(cssBytes)
+			output += cssStr + "\n"
+		}
+		return nil
+	})
 	if err != nil {
-		return "", err
+		return output, err
 	}
-	css = HandleBonchiMix(css)
-	err = writeToFile(out, css, true)
+	output = handleBonchiMix(output)
+	err = writeToFile(out, output, true)
 	if err != nil {
-		return "", err
+		return output, err
 	}
-	return css, nil
+	return output, nil
 }
 
-func GetBundledCss(inputPath string) (string, error) {
+func getBundledCssFromFile(inputPath string) (string, error) {
 	output := ""
 	fileBytes, err := os.ReadFile(inputPath)
 	if err != nil {
@@ -50,7 +67,7 @@ func GetBundledCss(inputPath string) (string, error) {
 	return output, nil
 }
 
-func HandleBonchiMix(css string) string {
+func handleBonchiMix(css string) string {
 	out := ""
 	lines := strings.Split(css, "\n")
 	for _, line := range lines {

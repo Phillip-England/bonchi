@@ -1,11 +1,5 @@
-@bonchi ./css/grid-hmf.css;
-
 html, body {
   min-height: 100vh;
-}
-
-.hidden {
-  visibility: hidden;
 }
 
 * {

@@ -7,43 +7,6 @@ go get github.com/Phillip-England/bonchi
 ```
 
 ## Hello, World!
-To get started, you'll need three files `./input.css`, `./global.css`, and `main.go`.
-
-In `./input.css`, we use `@bonchi` to import css and `bonchi-mix` to mixin the css from other classes.
-
-**BIG GOTCHA HERE**, the import you use with `@bonchi` is relative to the root of your **GO PROGRAM**, not the **INPUT FILE** itself.
-
-`./input.css`
-```css
-@bonchi ./global.css;
-
-.some-element {
-  bonchi-mix:".hidden .bg-blue";
-}
-```
-
-In `./global.css`, we define some css to be imported.
-```css
-html, body {
-  min-height: 100vh;
-}
-
-* {
-  margin:0;
-  padding:0;
-  box-sizing: border-box;
-}
-
-.hidden {
-  visibility: hidden;
-}
-
-.bg-blue {
-  background-color:blue;
-}
-```
-
-Once you get your css lined up, in `main.go` run:
 ```go
 package main
 
@@ -54,10 +17,30 @@ import (
 )
 
 func main() {
-  css, err := bonchi.Bundle("./input.css", "./output.css")
+  css, err := bonchi.Bundle("./css", "./static/output.css")
   if err != nil {
     panic(err)
   }
   fmt.Println(css)
+}
+```
+
+## Target Dir
+Bonchi is based off of a target directory. All the files in the directory will be bundled and processed for mixin support.
+
+## Mixin
+Any class can be used within another class using `bonchi-mix:".className1 .className2";`
+
+```css
+.blue {
+  background-color:skyblue;
+}
+
+.border {
+  border:solid black 1px;
+}
+
+button {
+  bonchi-mix:".blue .border";
 }
 ```
