@@ -3,68 +3,121 @@ package bonchi
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/tdewolff/minify/v2"
+	"github.com/tdewolff/minify/v2/css"
+	"github.com/tdewolff/minify/v2/html"
+	"github.com/tdewolff/minify/v2/js"
+	"github.com/tdewolff/minify/v2/json"
+	"github.com/tdewolff/minify/v2/svg"
+	"github.com/tdewolff/minify/v2/xml"
 )
 
-func Bundle(inputDir string, out string) (string, error) {
-	output := ""
+func BundleJs(inputDir string, out string) (string, error) {
+	var files []string
 	err := filepath.Walk(inputDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if info.IsDir() {
 			return nil
 		}
-		pathParts := strings.Split(path, ".")
-		lastPart := pathParts[len(pathParts)-1]
-		if lastPart == "css" {
-			cssBytes, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			cssStr := string(cssBytes)
-			output += cssStr + "\n"
+		if strings.HasSuffix(path, ".js") {
+			files = append(files, path)
 		}
 		return nil
 	})
 	if err != nil {
-		return output, err
+		return "", err
 	}
-	output = handleBonchiMix(output)
-	err = writeToFile(out, output, true)
+	sort.Slice(files, func(i, j int) bool {
+		numI := extractPrefixNumber(files[i])
+		numJ := extractPrefixNumber(files[j])
+		return numI < numJ
+	})
+	output := ""
+	for _, file := range files {
+		jsBytes, err := os.ReadFile(file)
+		if err != nil {
+			return output, err
+		}
+		output += string(jsBytes) + "\n"
+	}
+
+	m := prepareMinify()
+	minifiedJS, err := m.String("application/javascript", output)
 	if err != nil {
-		return output, err
+		return "", fmt.Errorf("failed to minify JavaScript: %w", err)
 	}
-	return output, nil
+	err = writeToFile(out, minifiedJS, true)
+	if err != nil {
+		return minifiedJS, err
+	}
+	return minifiedJS, nil
 }
 
-func getBundledCssFromFile(inputPath string) (string, error) {
-	output := ""
-	fileBytes, err := os.ReadFile(inputPath)
+func BundleCss(inputDir string, out string) (string, error) {
+	var files []string
+	err := filepath.Walk(inputDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(path, ".css") {
+			files = append(files, path)
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	fileStr := string(fileBytes)
-	lines := strings.Split(fileStr, "\n")
-	for _, line := range lines {
-		lineParts := strings.Split(line, " ")
-		if len(lineParts) != 2 {
-			output += line + "\n"
-			continue
-		}
-		if lineParts[0] != "@bonchi" {
-			output += line + "\n"
-			continue
-		}
-		filePath := strings.ReplaceAll(lineParts[1], ";", "")
-		cssBytes, err := os.ReadFile(filePath)
+	sort.Slice(files, func(i, j int) bool {
+		numI := extractPrefixNumber(files[i])
+		numJ := extractPrefixNumber(files[j])
+		return numI < numJ
+	})
+	output := ""
+	for _, file := range files {
+		cssBytes, err := os.ReadFile(file)
 		if err != nil {
-			return "", err
+			return output, err
 		}
-		cssContent := string(cssBytes)
-		output += cssContent + "\n"
+		output += string(cssBytes) + "\n"
 	}
-	return output, nil
+	output = handleBonchiMix(output)
+	m := prepareMinify()
+	minifiedCSS, err := m.String("text/css", output)
+	if err != nil {
+		return "", fmt.Errorf("failed to minify CSS: %w", err)
+	}
+	err = writeToFile(out, minifiedCSS, true)
+	if err != nil {
+		return minifiedCSS, err
+	}
+	return minifiedCSS, nil
+}
+
+func extractPrefixNumber(filePath string) int {
+	base := filepath.Base(filePath)
+	parts := strings.Split(base, ".")
+	if len(parts) < 2 {
+		return 999999
+	}
+	num, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 999999
+	}
+	return num
 }
 
 func handleBonchiMix(css string) string {
@@ -129,4 +182,69 @@ func writeToFile(path string, content string, overwrite bool) error {
 		return fmt.Errorf("failed to write to file: %w", err)
 	}
 	return nil
+}
+
+func prepareMinify() *minify.M {
+	m := minify.New()
+	m.AddFunc("text/css", css.Minify)
+	m.AddFunc("text/html", html.Minify)
+	m.AddFunc("image/svg+xml", svg.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("^(application|text)/(x-)?(java|ecma)script$"), js.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("[/+]json$"), json.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("[/+]xml$"), xml.Minify)
+	return m
+}
+
+func minifyStaticFiles(m *minify.M, dirPath string) {
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		ext := filepath.Ext(path)
+		var mimetype string
+		switch ext {
+		case ".css":
+			mimetype = "text/css"
+		case ".html":
+			mimetype = "text/html"
+		case ".js":
+			mimetype = "application/javascript"
+		case ".json":
+			mimetype = "application/json"
+		case ".svg":
+			mimetype = "image/svg+xml"
+		case ".xml":
+			mimetype = "text/xml"
+		default:
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			fmt.Printf("Error opening file: %s\n", err)
+			return err
+		}
+		defer f.Close()
+		fileBytes, err := io.ReadAll(f)
+		if err != nil {
+			fmt.Printf("Error reading file: %s\n", err)
+			return err
+		}
+		minifiedBytes, err := m.Bytes(mimetype, fileBytes)
+		if err != nil {
+			fmt.Printf("Error minifying file: %s\n", err)
+			return err
+		}
+		err = os.WriteFile(path, minifiedBytes, info.Mode()) // Preserving original file permissions
+		if err != nil {
+			fmt.Printf("Error writing minified file: %s\n", err)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("Error walking the directory: %s\n", err)
+	}
 }

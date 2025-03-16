@@ -1,17 +1,1 @@
-.grid-hmf {
-  display:grid;
-  visibility: hidden;
-}
-html, body {
-  min-height: 100vh;
-}
-
-* {
-  margin:0;
-  padding:0;
-  box-sizing: border-box;
-}
-.hidden {
-  visibility: hidden;
-}
-
+html,body{min-height:100vh}*{margin:0;padding:0;box-sizing:border-box}.hidden{visibility:hidden}.grid-hmf{display:grid;visibility:hidden}
